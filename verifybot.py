@@ -103,15 +103,6 @@ async def addrole(ctx, role):
     role = get(member.guild.roles, name=role)
     await member.add_roles(role)
 
-@bot.command(pass_context=True)
-#@commands.has_role("Admin")
-async def hasRole(ctx, user: discord.Member):
-    role = discord.utils.find(lambda r: r.name == RESOURCE_ROLE, ctx.message.guild.roles)
-    if role in user.roles:
-        return True
-    else:
-        await bot.add_roles(user, role)
-
 # this searches through all transactions to find a matching email
 # if an email is found, it assigns a role and returns true
 # if an email is not found, it returns false
