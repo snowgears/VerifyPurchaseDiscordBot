@@ -1,5 +1,5 @@
 # VerifyPurchaseDiscordBot
-Discord bot that verifies a purchase from PayPal and assigns roles
+Discord bot that searches your PayPal transactions (by user entered email) and assigns a role if the purchase was verified.
 
 install the libraries in library.sh
 rename ".env example" to ".env"
