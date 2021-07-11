@@ -11,8 +11,9 @@ There is also an option to check for previously verified emails!
 
 ![](https://i.imgur.com/6Y6iGJO.png)
 
-install the libraries in library.sh
-rename ".env example" to ".env"
+**Steps for getting started:**
+- install the libraries in library.sh file
+- rename ".env example" to ".env"
 
 
 **Guide to filling out the .env file:**
