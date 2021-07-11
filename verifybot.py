@@ -1,5 +1,6 @@
 import requests
 import json
+import pickle
 import discord
 from discord_slash import SlashCommand
 from discord_slash.utils.manage_commands import create_option
@@ -26,7 +27,10 @@ PAYPAL_TOKEN = 0
 RESOURCE_ID = os.getenv("RESOURCE_ID")
 RESOURCE_ROLE = os.getenv("RESOURCE_ROLE")
 
-DEBUG = True
+DEBUG = False
+
+CHECK_PREVIOUSLY_VERIFIED = True
+emails_verified = []
 
 # init discord client
 client = discord.Client(intents=discord.Intents.all())
@@ -56,6 +60,31 @@ def format_date(date):
 #                 print(key, '=', item)
 #         else:
 #             print(key, '=', value)
+
+# read in any previously verified emails from file
+def read_in_emails():
+    if CHECK_PREVIOUSLY_VERIFIED:
+        global emails_verified
+        try:
+            with open ('verified_emails', 'rb') as fp:
+                emails_verified = pickle.load(fp)
+        except FileNotFoundError:
+            pass
+
+# write out any previously verified emails to file
+def write_out_emails():
+    if CHECK_PREVIOUSLY_VERIFIED:
+        global emails_verified
+        with open('verified_emails', 'wb') as fp:
+            pickle.dump(emails_verified, fp)
+
+# check if an email has been previously verified
+def has_previously_verified(email):
+    if CHECK_PREVIOUSLY_VERIFIED:
+        global emails_verified
+        if email in emails_verified:
+            return True
+    return False
 
 # this gets an oauth token from the paypal api
 def get_token():
@@ -128,6 +157,9 @@ async def on_ready():
     global PAYPAL_TOKEN
     PAYPAL_TOKEN = get_token()
 
+    # read in any previously verified emails
+    read_in_emails()
+
 # defines a new 'slash command' in discord and what options to show to user for params
 @slash.slash(name="paypal",
              description="Verify your paypal purchase.",
@@ -146,34 +178,46 @@ async def _verifypurchase(ctx, email: str): # Defines a new "context" (ctx) comm
     if role in ctx.author.roles:
         await ctx.send(f"You have already verified your purchase!")
         return
+
+    # next check that the email has not already been verified
+    if has_previously_verified(email):
+        await ctx.send(f"This email has already verified a purchase!")
+        return
     
     # get current timestamp in UTC
     end_date = datetime.today()
-    
-
-    # loop through (current - 30) until a value is found or count == 36 (36 months/3 years is max for paypal api)
-    count = 0
-    success = False
 
     await ctx.defer()
-    #search through purchases on 30 day intervals (paypal api has a max of 31 days)
-    while(success == False or count < 36): #make this 36 in future
     
+    # loop through purchases until a value is found or count == 36 (36 months is max for how far paypal api can go back)
+    count = 0
+    success = False
+    while(success == False or count < 36):
+    
+        #search through purchases on 30 day intervals (paypal api has a max of 31 days)
         start_date = end_date - timedelta(days=30)
         transactions = json.loads(get_transactions(start_date, end_date))
         
         resource_id = await find_resource_from_email(email, transactions)
 
+        # if a matching email was found in the paypal transactions
         if resource_id:
+            # AND the transaction matches the resource id (from spigot)
             if RESOURCE_ID == resource_id:
                 success = True;
+                # add the configured discord role to the user who ran the command
                 await addrole(ctx, RESOURCE_ROLE)
 
-        end_date = start_date #make new end_date the old start_date
+        # make new end_date the old start_date for next while iteration
+        end_date = start_date
         count = count + 1
     
     if success:
         await ctx.send(f"Successfully verified PayPal purchase!")
+        # add the email to previously verified emails and write to file
+        global emails_verified
+        emails_verified.append(email)
+        write_out_emails()
     else:
         await ctx.send(f"Failed to verify PayPal purchase.")
 
