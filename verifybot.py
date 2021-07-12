@@ -137,16 +137,19 @@ async def addrole(ctx, role):
 # if an email is found, it assigns a role and returns true
 # if an email is not found, it returns false
 async def find_resource_from_email(email, transactions):
-    for transaction in transactions["transaction_details"]:
-        try:
-            purchase_custom_field = transaction['transaction_info']['custom_field']
-            purchase_email = transaction['payer_info']['email_address']
-            #print(purchase_custom_field)
-            #print(purchase_email)
-            if purchase_email.lower() == email.lower():
-                s = purchase_custom_field.split('|')
-                return s[len(s)-1] # return last index of list (the spigot resource id)
-        except KeyError:
+    try:
+        for transaction in transactions["transaction_details"]:
+            try:
+                purchase_custom_field = transaction['transaction_info']['custom_field']
+                purchase_email = transaction['payer_info']['email_address']
+                #print(purchase_custom_field)
+                #print(purchase_email)
+                if purchase_email.lower() == email.lower():
+                    s = purchase_custom_field.split('|')
+                    return s[len(s)-1] # return last index of list (the spigot resource id)
+            except KeyError:
+                pass
+    except KeyError:
             pass
     return ''
 
