@@ -28,6 +28,7 @@ RESOURCE_ID = os.getenv("RESOURCE_ID")
 RESOURCE_ROLE = os.getenv("RESOURCE_ROLE")
 
 DEBUG = False
+APPEAR_OFFLINE = True
 
 CHECK_PREVIOUSLY_VERIFIED = True
 emails_verified = []
@@ -153,6 +154,11 @@ async def find_resource_from_email(email, transactions):
 @client.event
 async def on_ready():
     print("Ready!")
+
+    # TODO add this later
+    # if APPEAR_OFFLINE:
+    #     await client.change_presence(status=discord.Status.offline)
+
     # get the oauth token needed for paypal requests
     global PAYPAL_TOKEN
     PAYPAL_TOKEN = get_token()
@@ -187,12 +193,12 @@ async def _verifypurchase(ctx, email: str): # Defines a new "context" (ctx) comm
     # get current timestamp in UTC
     end_date = datetime.today()
 
-    await ctx.defer()
+    await ctx.defer(hidden=True)
     
     # loop through purchases until a value is found or count == 36 (36 months is max for how far paypal api can go back)
     count = 0
     success = False
-    while(success == False or count < 36):
+    while(success == False and count < 36):
     
         #search through purchases on 30 day intervals (paypal api has a max of 31 days)
         start_date = end_date - timedelta(days=30)
