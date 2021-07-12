@@ -7,8 +7,13 @@ Discord bot that searches your PayPal transactions (by user entered email) and a
 
 ![](https://i.imgur.com/IC70YYD.png)
 
-install the libraries in library.sh
-rename ".env example" to ".env"
+There is also an option to check for previously verified emails!
+
+![](https://i.imgur.com/6Y6iGJO.png)
+
+**Steps for getting started:**
+- install the libraries in library.sh file
+- rename ".env example" to ".env"
 
 
 **Guide to filling out the .env file:**
