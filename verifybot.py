@@ -176,12 +176,12 @@ async def _verifypurchase(ctx, email: str): # Defines a new "context" (ctx) comm
     # first check that the user doesn't already have the role
     role = discord.utils.find(lambda r: r.name == RESOURCE_ROLE, ctx.author.guild.roles)
     if role in ctx.author.roles:
-        await ctx.send(f"You have already verified your purchase!")
+        await ctx.send(f"You have already verified your purchase!", hidden=True)
         return
 
     # next check that the email has not already been verified
     if has_previously_verified(email):
-        await ctx.send(f"This email has already verified a purchase!")
+        await ctx.send(f"This email has already verified a purchase!", hidden=True)
         return
     
     # get current timestamp in UTC
@@ -213,13 +213,13 @@ async def _verifypurchase(ctx, email: str): # Defines a new "context" (ctx) comm
         count = count + 1
     
     if success:
-        await ctx.send(f"Successfully verified PayPal purchase!")
+        await ctx.send(f"Successfully verified PayPal purchase!", hidden=True)
         # add the email to previously verified emails and write to file
         global emails_verified
         emails_verified.append(email)
         write_out_emails()
     else:
-        await ctx.send(f"Failed to verify PayPal purchase.")
+        await ctx.send("Failed to verify PayPal purchase.", hidden=True)
 
 # run the discord client with the discord token
 client.run(DISCORD_TOKEN)
