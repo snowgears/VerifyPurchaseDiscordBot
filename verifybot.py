@@ -1,6 +1,7 @@
 import requests
 import json
 import pickle
+import logging
 import discord
 from discord_slash import SlashCommand
 from discord_slash.utils.manage_commands import create_option
@@ -156,11 +157,11 @@ async def find_resource_from_email(email, transactions):
 # discord event that fires when the bot is ready and listening
 @client.event
 async def on_ready():
-    print("Ready!")
+    #set the logging config
+    logging.basicConfig(handlers=[logging.FileHandler('verifybot.log', 'a+', 'utf-8')], level=logging.INFO, format='%(asctime)s: %(message)s')
 
-    # TODO add this later
-    # if APPEAR_OFFLINE:
-    #     await client.change_presence(status=discord.Status.offline)
+    if APPEAR_OFFLINE:
+        await client.change_presence(status=discord.Status.offline)
 
     # get the oauth token needed for paypal requests
     global PAYPAL_TOKEN
@@ -168,6 +169,9 @@ async def on_ready():
 
     # read in any previously verified emails
     read_in_emails()
+
+    print("Ready!")
+
 
 # defines a new 'slash command' in discord and what options to show to user for params
 @slash.slash(name="paypal",
@@ -182,15 +186,19 @@ async def on_ready():
              guild_ids=GUILD_IDS)
 async def _verifypurchase(ctx, email: str): # Defines a new "context" (ctx) command called "paypal."
     
+    logging.info(f"{ctx.author.name} ran command '/paypal {email}'")
+
     # first check that the user doesn't already have the role
     role = discord.utils.find(lambda r: r.name == RESOURCE_ROLE, ctx.author.guild.roles)
     if role in ctx.author.roles:
         await ctx.send(f"You have already verified your purchase!", hidden=True)
+        logging.info(f"{ctx.author.name} already had the role {RESOURCE_ROLE}")
         return
 
     # next check that the email has not already been verified
     if has_previously_verified(email):
         await ctx.send(f"This email has already verified a purchase!", hidden=True)
+        logging.warning(f"{ctx.author.name} used an email that was already verified'")
         return
     
     # get current timestamp in UTC
@@ -223,12 +231,14 @@ async def _verifypurchase(ctx, email: str): # Defines a new "context" (ctx) comm
     
     if success:
         await ctx.send(f"Successfully verified PayPal purchase!", hidden=True)
+        logging.info(f"{ctx.author.name} successfully verified their purchase")
         # add the email to previously verified emails and write to file
         global emails_verified
         emails_verified.append(email)
         write_out_emails()
     else:
         await ctx.send("Failed to verify PayPal purchase.", hidden=True)
+        logging.info(f"{ctx.author.name} failed to verify their purchase")
 
 # run the discord client with the discord token
 client.run(DISCORD_TOKEN)

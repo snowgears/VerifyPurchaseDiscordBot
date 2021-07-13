@@ -1,2 +1,3 @@
 .env
 verified_emails
+*.log
