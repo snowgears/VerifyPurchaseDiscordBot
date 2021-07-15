@@ -2,6 +2,7 @@ import requests
 import json
 import pickle
 import logging
+from threading import Timer
 import discord
 from discord_slash import SlashCommand
 from discord_slash.utils.manage_commands import create_option
@@ -104,6 +105,13 @@ def get_token():
     response = requests.post(url, auth=(PAYPAL_CLIENT_ID, PAYPAL_CLIENT_SECRET), data=payload)
     data = response.json()
 
+    # keep the token alive
+    token_expire = int(data['expires_in']) - 100
+    t = Timer(token_expire, get_token)
+    t.daemon = True
+    t.start()
+
+    logging.info(f"Got new access token.")
     return data['access_token']
 
 # this gets a list of transactions from the paypal api ranging from start_date to end_date
@@ -143,8 +151,9 @@ async def find_resource_from_email(email, transactions):
             try:
                 purchase_custom_field = transaction['transaction_info']['custom_field']
                 purchase_email = transaction['payer_info']['email_address']
-                #print(purchase_custom_field)
-                #print(purchase_email)
+                # if purchase_email == 'test@example.com':
+                #     print(purchase_custom_field)
+                #     print(purchase_email)
                 if purchase_email.lower() == email.lower():
                     s = purchase_custom_field.split('|')
                     return s[len(s)-1] # return last index of list (the spigot resource id)
@@ -214,7 +223,7 @@ async def _verifypurchase(ctx, email: str): # Defines a new "context" (ctx) comm
         #search through purchases on 30 day intervals (paypal api has a max of 31 days)
         start_date = end_date - timedelta(days=30)
         transactions = json.loads(get_transactions(start_date, end_date))
-        
+
         resource_id = await find_resource_from_email(email, transactions)
 
         # if a matching email was found in the paypal transactions
