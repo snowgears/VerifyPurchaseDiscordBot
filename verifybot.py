@@ -26,14 +26,18 @@ PAYPAL_CLIENT_SECRET = os.getenv("PAYPAL_CLIENT_SECRET")
 PAYPAL_ENDPOINT = "https://api-m.paypal.com"
 PAYPAL_TOKEN = 0
 
-RESOURCE_ID = os.getenv("RESOURCE_ID")
-RESOURCE_ROLE = os.getenv("RESOURCE_ROLE")
+RESOURCE_LIST = [str(i) for i in os.environ.get("RESOURCE_LIST").split(" ")]
+RESOURCE_ID_LIST = [i.split(":")[0] for i in RESOURCE_LIST]
+RESOURCE_ROLE_LIST = [i.split(":")[1] for i in RESOURCE_LIST]
+
+ADMIN_ID_LIST=[int(i) for i in os.environ.get("ADMIN_ID_LIST").split(" ")]
 
 DEBUG = False
 APPEAR_OFFLINE = True
 
-CHECK_PREVIOUSLY_VERIFIED = True
+CHECK_PREVIOUSLY_VERIFIED = False
 emails_verified = []
+resource_ids_verified = []
 
 # init discord client
 client = discord.Client(intents=discord.Intents.all())
@@ -45,7 +49,7 @@ slash = SlashCommand(client, sync_commands=True)
 # --- functions ---
 
 # this formats a date for submitting to the PayPal API endpoint
-def format_date(date):
+async def format_date(date):
     d = date.strftime('%Y-%m-%dT%H:%M:%SZ')
     return d
 
@@ -65,7 +69,7 @@ def format_date(date):
 #             print(key, '=', value)
 
 # read in any previously verified emails from file
-def read_in_emails():
+async def read_in_emails():
     if CHECK_PREVIOUSLY_VERIFIED:
         global emails_verified
         try:
@@ -73,24 +77,54 @@ def read_in_emails():
                 emails_verified = pickle.load(fp)
         except FileNotFoundError:
             pass
+        global resource_ids_verified
+        try:
+            with open ('verified_resource_ids', 'rb') as fp:
+                resource_ids_verified = pickle.load(fp)
+        except FileNotFoundError:
+            pass
 
 # write out any previously verified emails to file
-def write_out_emails():
+async def write_out_emails():
     if CHECK_PREVIOUSLY_VERIFIED:
         global emails_verified
         with open('verified_emails', 'wb') as fp:
             pickle.dump(emails_verified, fp)
+        global resource_ids_verified
+        with open('verified_resource_ids', 'wb') as fr:
+            pickle.dump(resource_ids_verified, fr)
 
 # check if an email has been previously verified
-def has_previously_verified(email):
+async def has_previously_verified(email, resource_id):
     if CHECK_PREVIOUSLY_VERIFIED:
         global emails_verified
-        if email in emails_verified:
-            return True
+        try:
+            index = emails_verified.index(email)
+            resources_verified = resource_ids_verified[index]
+            for i in resources_verified.split(":"):
+                if resource_id == i:
+                    return True
+        except ValueError:
+            pass
     return False
 
+# add email and resource id list to verified
+async def add_previously_verified(email, resource_id):
+    if CHECK_PREVIOUSLY_VERIFIED:
+        global emails_verified
+        index = 0
+        try:
+            index = emails_verified.index(email)
+        except ValueError:
+            pass
+        global resource_ids_verified
+        # get list of previously verified resource ids
+        verified_ids = resource_ids_verified[index]
+        verified_ids = verified_ids + ":" + resource_id
+        resource_ids_verified[index] = verified_ids
+
 # this gets an oauth token from the paypal api
-def get_token():
+async def get_token():
     url = PAYPAL_ENDPOINT + '/v1/oauth2/token'
     
     headers = {
@@ -115,7 +149,7 @@ def get_token():
     return data['access_token']
 
 # this gets a list of transactions from the paypal api ranging from start_date to end_date
-def get_transactions(start_date, end_date):
+async def get_transactions(start_date, end_date):
     url = PAYPAL_ENDPOINT + "/v1/reporting/transactions"
 
     payload={}
@@ -125,8 +159,8 @@ def get_transactions(start_date, end_date):
     }
     
     payload = {
-        'start_date': f'{format_date(start_date)}',
-        'end_date':   f'{format_date(end_date)}',
+        'start_date': f'{await format_date(start_date)}',
+        'end_date':   f'{await format_date(end_date)}',
         'fields':   'all'
     }    
     
@@ -142,10 +176,19 @@ async def addrole(ctx, role):
     role = get(member.guild.roles, name=role)
     await member.add_roles(role)
 
-# this searches through all transactions to find a matching email
-# if an email is found, it assigns a role and returns true
-# if an email is not found, it returns false
-async def find_resource_from_email(email, transactions):
+# send a direct message to a list of admions
+@bot.command(pass_context=True)
+async def dm_admins(ctx, message):
+    #user: discord.User
+    for user_id in ADMIN_ID_LIST:
+        user = ctx.author.guild.get_member(user_id)
+        await user.send(message)
+
+# this searches through all transactions to find matching emails
+# if an email is found, it returns the resourceid from the transaction
+# if an email is not found, it returns an empty list
+async def find_resource_ids_from_email(email, transactions):
+    matching_ids = []
     try:
         for transaction in transactions["transaction_details"]:
             try:
@@ -156,12 +199,15 @@ async def find_resource_from_email(email, transactions):
                 #     print(purchase_email)
                 if purchase_email.lower() == email.lower():
                     s = purchase_custom_field.split('|')
-                    return s[len(s)-1] # return last index of list (the spigot resource id)
+                    s = s[len(s)-1]
+                    # only add matching resource id to list if it hasnt been verified yet
+                    if not await has_previously_verified(email, s):
+                        matching_ids.append(s) # add the matching spigot resource id)
             except KeyError:
                 pass
     except KeyError:
             pass
-    return ''
+    return matching_ids
 
 # discord event that fires when the bot is ready and listening
 @client.event
@@ -174,10 +220,10 @@ async def on_ready():
 
     # get the oauth token needed for paypal requests
     global PAYPAL_TOKEN
-    PAYPAL_TOKEN = get_token()
+    PAYPAL_TOKEN = await get_token()
 
     # read in any previously verified emails
-    read_in_emails()
+    await read_in_emails()
 
     print("Ready!")
 
@@ -197,56 +243,68 @@ async def _verifypurchase(ctx, email: str): # Defines a new "context" (ctx) comm
     
     logging.info(f"{ctx.author.name} ran command '/paypal {email}'")
 
-    # first check that the user doesn't already have the role
-    role = discord.utils.find(lambda r: r.name == RESOURCE_ROLE, ctx.author.guild.roles)
-    if role in ctx.author.roles:
-        await ctx.send(f"You have already verified your purchase!", hidden=True)
-        logging.info(f"{ctx.author.name} already had the role {RESOURCE_ROLE}")
+    available_roles = RESOURCE_ROLE_LIST.copy()
+    # first check that the user doesn't already have the roles
+    #role_count = 0
+    for role_element in RESOURCE_ROLE_LIST:
+        role = discord.utils.find(lambda r: r.name == role_element, ctx.author.guild.roles)
+        if role in ctx.author.roles:
+            available_roles.remove(role_element)
+            #role_count = role_count + 1
+    if len(available_roles) == 0:
+        await ctx.send(f"You have already verified your purchase(s)!", hidden=True)
+        logging.info(f"{ctx.author.name} already had all verified roles.")
         return
 
-    # next check that the email has not already been verified
-    if has_previously_verified(email):
-        await ctx.send(f"This email has already verified a purchase!", hidden=True)
-        logging.warning(f"{ctx.author.name} used an email that was already verified'")
-        return
-    
     # get current timestamp in UTC
     end_date = datetime.today()
 
     await ctx.defer(hidden=True)
     
+    roles_given = []
     # loop through purchases until a value is found or count == 36 (36 months is max for how far paypal api can go back)
     count = 0
     success = False
-    while(success == False and count < 36):
+    while(len(available_roles) !=0 and count < 36):
     
         #search through purchases on 30 day intervals (paypal api has a max of 31 days)
         start_date = end_date - timedelta(days=30)
-        transactions = json.loads(get_transactions(start_date, end_date))
+        transactions = json.loads(await get_transactions(start_date, end_date))
 
-        resource_id = await find_resource_from_email(email, transactions)
+        resource_ids = await find_resource_ids_from_email(email, transactions)
 
-        # if a matching email was found in the paypal transactions
-        if resource_id:
-            # AND the transaction matches the resource id (from spigot)
-            if RESOURCE_ID == resource_id:
+        # for all found resourceids in the paypal transactions
+        for id in resource_ids:
+            try:
+                # get index of id in main resource id list
+                index = RESOURCE_ID_LIST.index(id)
+                # get the corresponding resource role associated with that resource id
+                role = RESOURCE_ROLE_LIST[index]
+                available_roles.remove(role)
+                roles_given.append(role)
                 success = True;
+                # add the email to previously verified emails (with the resource id)
+                await add_previously_verified(email, id)
                 # add the configured discord role to the user who ran the command
-                await addrole(ctx, RESOURCE_ROLE)
+                await addrole(ctx, role)
+                logging.info(f"{ctx.author.name} given role: "+role)
+            except ValueError:
+                pass
 
         # make new end_date the old start_date for next while iteration
         end_date = start_date
+        print(f"{count}")
         count = count + 1
     
     if success:
         await ctx.send(f"Successfully verified PayPal purchase!", hidden=True)
+        await dm_admins(ctx, "{} successfully verified a purchase with email: ".format(ctx.author.mention)+f"{email}. Given roles: {roles_given}")
         logging.info(f"{ctx.author.name} successfully verified their purchase")
-        # add the email to previously verified emails and write to file
-        global emails_verified
-        emails_verified.append(email)
-        write_out_emails()
+        # write verified emails and resource ids out to files
+        await write_out_emails()
     else:
         await ctx.send("Failed to verify PayPal purchase.", hidden=True)
+        await dm_admins(ctx, "{} failed to verify a purchase with email: ".format(ctx.author.mention)+f"{email}")
         logging.info(f"{ctx.author.name} failed to verify their purchase")
 
 # run the discord client with the discord token
