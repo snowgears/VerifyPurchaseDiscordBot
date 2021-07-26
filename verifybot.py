@@ -293,7 +293,6 @@ async def _verifypurchase(ctx, email: str): # Defines a new "context" (ctx) comm
 
         # make new end_date the old start_date for next while iteration
         end_date = start_date
-        print(f"{count}")
         count = count + 1
     
     if success:
