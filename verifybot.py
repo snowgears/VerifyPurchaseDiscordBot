@@ -29,9 +29,9 @@ PAYPAL_TOKEN = 0
 RESOURCES = {}
 
 for resource in os.environ.get("RESOURCE_LIST").split(" "):
-    resource_id = resource.split(":")[0]
+    resource_name = resource.split(":")[0]
     resource_roles = (resource.split(":")[1]).split(",")
-    RESOURCES[resource_id] = resource_roles
+    RESOURCES[resource_name] = resource_roles
 
 ADMIN_ID_LIST=[int(i) for i in os.environ.get("ADMIN_ID_LIST").split(" ")]
 
@@ -40,7 +40,7 @@ APPEAR_OFFLINE = True
 
 CHECK_PREVIOUSLY_VERIFIED = False
 emails_verified = []
-resource_ids_verified = []
+resource_names_verified = []
 
 # init discord client
 client = discord.Client(intents=discord.Intents.all())
@@ -80,10 +80,10 @@ async def read_in_emails():
                 emails_verified = pickle.load(fp)
         except FileNotFoundError:
             pass
-        global resource_ids_verified
+        global resource_names_verified
         try:
-            with open ('verified_resource_ids', 'rb') as fp:
-                resource_ids_verified = pickle.load(fp)
+            with open ('verified_resource_names', 'rb') as fp:
+                resource_names_verified = pickle.load(fp)
         except FileNotFoundError:
             pass
 
@@ -93,26 +93,26 @@ async def write_out_emails():
         global emails_verified
         with open('verified_emails', 'wb') as fp:
             pickle.dump(emails_verified, fp)
-        global resource_ids_verified
-        with open('verified_resource_ids', 'wb') as fr:
-            pickle.dump(resource_ids_verified, fr)
+        global resource_names_verified
+        with open('verified_resource_names', 'wb') as fr:
+            pickle.dump(resource_names_verified, fr)
 
 # check if an email has been previously verified
-async def has_previously_verified(email, resource_id):
+async def has_previously_verified(email, resource_name):
     if CHECK_PREVIOUSLY_VERIFIED:
         global emails_verified
         try:
             index = emails_verified.index(email)
-            resources_verified = resource_ids_verified[index]
+            resources_verified = resource_names_verified[index]
             for i in resources_verified.split(":"):
-                if resource_id == i:
+                if resource_name == i:
                     return True
         except ValueError:
             pass
     return False
 
-# add email and resource id list to verified
-async def add_previously_verified(email, resource_id):
+# add email and resource name list to verified
+async def add_previously_verified(email, resource_name):
     if CHECK_PREVIOUSLY_VERIFIED:
         global emails_verified
         index = 0
@@ -120,11 +120,11 @@ async def add_previously_verified(email, resource_id):
             index = emails_verified.index(email)
         except ValueError:
             pass
-        global resource_ids_verified
-        # get list of previously verified resource ids
-        verified_ids = resource_ids_verified[index]
-        verified_ids = verified_ids + ":" + resource_id
-        resource_ids_verified[index] = verified_ids
+        global resource_names_verified
+        # get list of previously verified resource names
+        verified_names = resource_names_verified[index]
+        verified_names = verified_names + ":" + resource_name
+        resource_names_verified[index] = verified_names
 
 # this gets an oauth token from the paypal api
 async def get_token():
@@ -164,7 +164,8 @@ async def get_transactions(start_date, end_date):
     payload = {
         'start_date': f'{await format_date(start_date)}',
         'end_date':   f'{await format_date(end_date)}',
-        'fields':   'all'
+        'transaction_status': 'S',
+        'fields':   'cart_info, payer_info'
     }    
     
     response = requests.get(url, headers=headers, params=payload)
@@ -188,29 +189,29 @@ async def dm_admins(ctx, message):
         await user.send(message)
 
 # this searches through all transactions to find matching emails
-# if an email is found, it returns the resourceid from the transaction
+# if an email is found, it returns the resource name from the transaction
 # if an email is not found, it returns an empty list
-async def find_resource_ids_from_email(email, transactions):
-    matching_ids = []
+async def find_resource_names_from_email(email, transactions):
+    matching_names = []
     try:
         for transaction in transactions["transaction_details"]:
             try:
-                purchase_custom_field = transaction['transaction_info']['custom_field']
+                purchase_item_name = transaction['cart_info']['item_details'][0]['item_name']
                 purchase_email = transaction['payer_info']['email_address']
                 # if purchase_email == 'test@example.com':
                 #     print(purchase_custom_field)
                 #     print(purchase_email)
                 if purchase_email.lower() == email.lower():
-                    s = purchase_custom_field.split('|')
-                    s = s[len(s)-1]
-                    # only add matching resource id to list if it hasnt been verified yet
-                    if not await has_previously_verified(email, s):
-                        matching_ids.append(s) # add the matching spigot resource id)
+                    pl_name = (purchase_item_name.split('|')[0]).replace("Purchase Resource:", "")
+                    pl_name = pl_name.strip()
+                    # only add matching resource name to list if it hasnt been verified yet
+                    if not await has_previously_verified(email, pl_name):
+                        matching_names.append(pl_name) # add the matching spigot resource name)
             except KeyError:
                 pass
     except KeyError:
             pass
-    return matching_ids
+    return matching_names
 
 # discord event that fires when the bot is ready and listening
 @client.event
@@ -232,8 +233,8 @@ async def on_ready():
 
 
 # defines a new 'slash command' in discord and what options to show to user for params
-@slash.slash(name="paypal",
-             description="Verify your paypal purchase.",
+@slash.slash(name="verify",
+             description="Verify your plugin purchase.",
              options=[
                create_option(
                  name="email",
@@ -248,8 +249,8 @@ async def _verifypurchase(ctx, email: str): # Defines a new "context" (ctx) comm
 
     available_roles = []
 
-    for id_element in RESOURCES.keys():
-        for role_element in RESOURCES.get(id_element):
+    for name_element in RESOURCES.keys():
+        for role_element in RESOURCES.get(name_element):
             role = discord.utils.find(lambda r: r.name == role_element, ctx.author.guild.roles)
             if role not in ctx.author.roles:
                 available_roles.append(role_element)
@@ -274,19 +275,18 @@ async def _verifypurchase(ctx, email: str): # Defines a new "context" (ctx) comm
         start_date = end_date - timedelta(days=30)
         transactions = json.loads(await get_transactions(start_date, end_date))
 
-        resource_ids = await find_resource_ids_from_email(email, transactions)
+        resource_names = await find_resource_names_from_email(email, transactions)
 
-        # for all found resourceids in the paypal transactions
-        for id in resource_ids:
+        # for all found resourcenames in the paypal transactions
+        for pl_name in resource_names:
             try:
-                # get index of id in main resource id list
-                roles = RESOURCES.get(id)
+                roles = RESOURCES.get(pl_name)
                 for role in roles:
                     available_roles.remove(role)
                     roles_given.append(role)
                     success = True;
-                    # add the email to previously verified emails (with the resource id)
-                    await add_previously_verified(email, id)
+                    # add the email to previously verified emails (with the resource name)
+                    await add_previously_verified(email, pl_name)
                     # add the configured discord role to the user who ran the command
                     await addrole(ctx, role)
                     logging.info(f"{ctx.author.name} given role: "+role)
@@ -301,7 +301,7 @@ async def _verifypurchase(ctx, email: str): # Defines a new "context" (ctx) comm
         await ctx.send(f"Successfully verified PayPal purchase!", hidden=True)
         await dm_admins(ctx, "{} successfully verified a purchase with email: ".format(ctx.author.mention)+f"{email}. Given roles: {roles_given}")
         logging.info(f"{ctx.author.name} successfully verified their purchase")
-        # write verified emails and resource ids out to files
+        # write verified emails and resource names out to files
         await write_out_emails()
     else:
         await ctx.send("Failed to verify PayPal purchase.", hidden=True)
