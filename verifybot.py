@@ -26,9 +26,12 @@ PAYPAL_CLIENT_SECRET = os.getenv("PAYPAL_CLIENT_SECRET")
 PAYPAL_ENDPOINT = "https://api-m.paypal.com"
 PAYPAL_TOKEN = 0
 
-RESOURCE_LIST = [str(i) for i in os.environ.get("RESOURCE_LIST").split(" ")]
-RESOURCE_ID_LIST = [i.split(":")[0] for i in RESOURCE_LIST]
-RESOURCE_ROLE_LIST = [i.split(":")[1] for i in RESOURCE_LIST]
+RESOURCES = {}
+
+for resource in os.environ.get("RESOURCE_LIST").split(" "):
+    resource_id = resource.split(":")[0]
+    resource_roles = (resource.split(":")[1]).split(",")
+    RESOURCES[resource_id] = resource_roles
 
 ADMIN_ID_LIST=[int(i) for i in os.environ.get("ADMIN_ID_LIST").split(" ")]
 
@@ -243,14 +246,14 @@ async def _verifypurchase(ctx, email: str): # Defines a new "context" (ctx) comm
     
     logging.info(f"{ctx.author.name} ran command '/paypal {email}'")
 
-    available_roles = RESOURCE_ROLE_LIST.copy()
-    # first check that the user doesn't already have the roles
-    #role_count = 0
-    for role_element in RESOURCE_ROLE_LIST:
-        role = discord.utils.find(lambda r: r.name == role_element, ctx.author.guild.roles)
-        if role in ctx.author.roles:
-            available_roles.remove(role_element)
-            #role_count = role_count + 1
+    available_roles = []
+
+    for id_element in RESOURCES.keys():
+        for role_element in RESOURCES.get(id_element):
+            role = discord.utils.find(lambda r: r.name == role_element, ctx.author.guild.roles)
+            if role not in ctx.author.roles:
+                available_roles.append(role_element)
+
     if len(available_roles) == 0:
         await ctx.send(f"You have already verified your purchase(s)!", hidden=True)
         logging.info(f"{ctx.author.name} already had all verified roles.")
@@ -277,17 +280,16 @@ async def _verifypurchase(ctx, email: str): # Defines a new "context" (ctx) comm
         for id in resource_ids:
             try:
                 # get index of id in main resource id list
-                index = RESOURCE_ID_LIST.index(id)
-                # get the corresponding resource role associated with that resource id
-                role = RESOURCE_ROLE_LIST[index]
-                available_roles.remove(role)
-                roles_given.append(role)
-                success = True;
-                # add the email to previously verified emails (with the resource id)
-                await add_previously_verified(email, id)
-                # add the configured discord role to the user who ran the command
-                await addrole(ctx, role)
-                logging.info(f"{ctx.author.name} given role: "+role)
+                roles = RESOURCES.get(id)
+                for role in roles:
+                    available_roles.remove(role)
+                    roles_given.append(role)
+                    success = True;
+                    # add the email to previously verified emails (with the resource id)
+                    await add_previously_verified(email, id)
+                    # add the configured discord role to the user who ran the command
+                    await addrole(ctx, role)
+                    logging.info(f"{ctx.author.name} given role: "+role)
             except ValueError:
                 pass
 
