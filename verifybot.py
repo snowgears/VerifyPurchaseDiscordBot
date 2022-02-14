@@ -22,7 +22,9 @@ regex = r'\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b'
 
 DISCORD_TOKEN = os.getenv("DISCORD_TOKEN")
 GUILD_ID = [int(os.environ.get("GUILD_ID"))]
-CHANNEL_ID = int(os.environ.get("CHANNEL_ID"))
+REPORT_CHANNEL_ID = int(os.environ.get("REPORT_CHANNEL_ID"))
+VERIFY_CHANNEL_ID = int(os.environ.get("VERIFY_CHANNEL_ID"))
+ADMIN_ROLE_ID = int(os.environ.get("ADMIN_ROLE_ID"))
 ADMIN_ID_LIST = []
 if bool(os.environ.get("ADMIN_ID_LIST") and os.environ.get("ADMIN_ID_LIST").strip()):
     ADMIN_ID_LIST = [int(i) for i in os.environ.get("ADMIN_ID_LIST").split(" ")]
@@ -66,6 +68,7 @@ def check_email(email):
         return True
     else:
         return False
+
 
 # this is for debugging / viewing reponses from paypal api
 # def display_response(response):
@@ -190,6 +193,17 @@ async def get_transactions(start_date, end_date):
     return data
 
 
+@client.event
+async def on_message(message):
+    if message.author.id == client.user.id:
+        return
+    role = discord.utils.get(message.guild.roles, id=ADMIN_ROLE_ID)
+    if role in message.author.roles:
+        return
+    if message.channel.id == VERIFY_CHANNEL_ID:
+        await message.delete()
+
+
 # this is a discord bot command to add a role to a user
 @bot.command(pass_context=True)
 async def addrole(ctx, role_id):
@@ -203,19 +217,22 @@ async def addrole(ctx, role_id):
 async def dm_admins(ctx, email, username, roles_given, verified):
     # user: discord.User
     if verified:
-        message = "{} successfully verified a purchase with email: ".format(ctx.author.mention) + f"{email} and username: {username}. Given roles: "
+        message = "{} successfully verified a purchase with email: ".format(
+            ctx.author.mention) + f"{email} and username: {username}. Given roles: "
         for role_id in roles_given:
             message = message + f"<@&{role_id}> "
     else:
-        message = "{} failed to verify a purchase with email: ".format(ctx.author.mention) + f"{email} and username: {username}"
+        message = "{} failed to verify a purchase with email: ".format(
+            ctx.author.mention) + f"{email} and username: {username}"
     for user_id in ADMIN_ID_LIST:
         user = ctx.author.guild.get_member(user_id)
         await user.send(message)
 
+
 # send a message into a channel
 @bot.command(pass_context=True)
 async def channel_message(author, email, username, roles, verified):
-    channel = client.get_channel(CHANNEL_ID)
+    channel = client.get_channel(REPORT_CHANNEL_ID)
     roles_message = ""
     if verified:
         embed = discord.Embed(title="Purchase verify of premium plugins",
@@ -282,7 +299,7 @@ async def on_ready():
 
 # defines a new 'slash command' in discord and what options to show to user for params
 @slash.slash(name="verify",
-             description="Verify your plugin purchase.",
+             description="Verify your plugins purchase.",
              options=[
                  create_option(
                      name="email",
@@ -290,7 +307,7 @@ async def on_ready():
                      option_type=3,
                      required=True
                  ),
-                create_option(
+                 create_option(
                      name="username",
                      description="Your SpigotMc or McMarket username.",
                      option_type=3,
@@ -299,6 +316,9 @@ async def on_ready():
              ],
              guild_ids=GUILD_ID)
 async def _verifypurchase(ctx, email: str, username: str):  # Defines a new "context" (ctx) command called "paypal."
+
+    if not (ctx.channel.id == VERIFY_CHANNEL_ID):
+        return
 
     logging.info(f"{ctx.author.name} ran command '/paypal {email}'")
 
@@ -369,6 +389,7 @@ async def _verifypurchase(ctx, email: str, username: str):  # Defines a new "con
         await dm_admins(ctx, email, username, roles_given, False)
         await channel_message(ctx.author, email, username, roles_given, False)
         logging.info(f"{ctx.author.name} failed to verify their purchase")
+
 
 # run the discord client with the discord token
 client.run(DISCORD_TOKEN)
