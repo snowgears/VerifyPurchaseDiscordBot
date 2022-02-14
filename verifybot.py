@@ -3,6 +3,8 @@ import json
 import pickle
 import logging
 from threading import Timer
+import re
+
 import discord
 from discord_slash import SlashCommand
 from discord_slash.utils.manage_commands import create_option
@@ -17,6 +19,9 @@ from datetime import datetime, timedelta
 
 # first load the environment variables
 load_dotenv()
+
+# regular expression for validating an Email
+regex = r'\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b'
 
 DISCORD_TOKEN = os.getenv("DISCORD_TOKEN")
 GUILD_IDS = [int(i) for i in os.environ.get("GUILD_LIST").split(" ")]
@@ -55,6 +60,13 @@ slash = SlashCommand(client, sync_commands=True)
 async def format_date(date):
     d = date.strftime('%Y-%m-%dT%H:%M:%SZ')
     return d
+
+
+def check_email(email):
+    if re.fullmatch(regex, email):
+        return True
+    else:
+        return False
 
 # this is for debugging / viewing reponses from paypal api
 # def display_response(response):
@@ -246,6 +258,10 @@ async def on_ready():
 async def _verifypurchase(ctx, email: str): # Defines a new "context" (ctx) command called "paypal."
     
     logging.info(f"{ctx.author.name} ran command '/paypal {email}'")
+
+    if not check_email(email):
+        await ctx.send(f"You must provide a valid email!", hidden=True)
+        return
 
     available_roles = []
 
