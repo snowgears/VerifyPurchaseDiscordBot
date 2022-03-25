@@ -336,7 +336,7 @@ async def _verifypurchase(ctx, email: str, username: str):  # Defines a new "con
         return
 
     # get current timestamp in UTC
-    end_date = datetime.today()
+    end_date = datetime.utcnow()
 
     await ctx.defer(hidden=True)
 
