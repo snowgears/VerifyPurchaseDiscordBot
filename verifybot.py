@@ -8,7 +8,8 @@ import re
 
 import discord
 import requests
-from discord.ext.commands import Bot
+from discord.ext import commands
+import asyncio
 from discord.utils import get
 from discord_slash import SlashCommand
 from discord_slash.utils.manage_commands import create_option
@@ -49,7 +50,7 @@ resource_names_verified = []
 
 # init discord client
 client = discord.Client(intents=discord.Intents.all())
-bot = Bot("!")
+bot = commands.Bot(command_prefix='!')
 
 # declare the discord slash commands through the client.
 slash = SlashCommand(client, sync_commands=True)
@@ -145,13 +146,8 @@ async def add_previously_verified(email, resource_name):
 
 
 # this gets an oauth token from the paypal api
-async def get_token():
+def update_token():
     url = PAYPAL_ENDPOINT + '/v1/oauth2/token'
-
-    headers = {
-        "Accept": "application/json",
-        "Accept-Language": "en_US",
-    }
 
     payload = {
         "grant_type": "client_credentials"
@@ -161,20 +157,21 @@ async def get_token():
     data = response.json()
 
     # keep the token alive
-    token_expire = int(data['expires_in']) - 100
-    t = Timer(token_expire, get_token)
+    token_expire = int(data['expires_in']) - 60
+    t = Timer(token_expire, update_token)
     t.daemon = True
     t.start()
 
     logging.info(f"Got new access token.")
-    return data['access_token']
+    print("Got new access token.")
+    global PAYPAL_TOKEN
+    PAYPAL_TOKEN = data['access_token']
 
 
 # this gets a list of transactions from the paypal api ranging from start_date to end_date
 async def get_transactions(start_date, end_date):
     url = PAYPAL_ENDPOINT + "/v1/reporting/transactions"
 
-    payload = {}
     headers = {
         "Content-Type": "application/json",
         "Authorization": f"Bearer {PAYPAL_TOKEN}"
@@ -206,7 +203,7 @@ async def on_message(message):
 
 # this is a discord bot command to add a role to a user
 @bot.command(pass_context=True)
-async def addrole(ctx, role_id):
+async def add_role(ctx, role_id):
     member = ctx.author
     role = get(member.guild.roles, id=int(role_id))
     await member.add_roles(role)
@@ -288,8 +285,7 @@ async def on_ready():
         await client.change_presence(status=discord.Status.offline)
 
     # get the oauth token needed for paypal requests
-    global PAYPAL_TOKEN
-    PAYPAL_TOKEN = await get_token()
+    update_token()
 
     # read in any previously verified emails
     await read_in_emails()
@@ -351,7 +347,7 @@ async def _verifypurchase(ctx, email: str, username: str):  # Defines a new "con
     while len(available_roles) != 0 and count < 36:
 
         # search through purchases on 30-day intervals (PayPal api has a max of 31 days)
-        start_date = end_date - timedelta(days=30)
+        start_date = end_date - timedelta(days=31)
         transactions = json.loads(await get_transactions(start_date, end_date))
 
         resource_names = await find_resource_names_from_email(email, transactions)
@@ -362,13 +358,13 @@ async def _verifypurchase(ctx, email: str, username: str):  # Defines a new "con
                 roles = RESOURCES.get(pl_name)
                 roles_to_give = [value for value in roles if value in available_roles]
                 for role in roles_to_give:
+                    # add the configured discord role to the user who ran the command
+                    asyncio.create_task(add_role(ctx, role))
+                    # add the email to previously verified emails (with the resource name)
+                    await add_previously_verified(email, pl_name)
                     available_roles.remove(role)
                     roles_given.append(role)
                     success = True
-                    # add the email to previously verified emails (with the resource name)
-                    await add_previously_verified(email, pl_name)
-                    # add the configured discord role to the user who ran the command
-                    await addrole(ctx, role)
                     logging.info(f"{ctx.author.name} given role: " + role)
             except ValueError:
                 pass

@@ -3,3 +3,4 @@ verified_emails
 *.log
 .DS_Store
 .idea
+venv
