@@ -4,3 +4,4 @@ verified_emails
 .DS_Store
 .idea
 venv
+*.json

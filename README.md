@@ -74,5 +74,7 @@ RESOURCE_LIST="PluginName1:846789230670774275,846789230670774276;PluginName2:Rol
 ---
 Now just run the bot wherever you are going to host it (and make sure it has a sufficient role to assign roles to users):
 ``` 
-py -3 verifybot.py
+py -3 main.py
 ```
+[![Donate](https://img.shields.io/badge/Donate-PayPal-green.svg)](https://www.paypal.com/donate/?hosted_button_id=ZETC226F4FWB6) \
+**If this bot is helpful to you, please consider donating.**
