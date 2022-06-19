@@ -121,7 +121,9 @@ class VerifyBot:
                             self.database["customers"][purchase_email] = user_purchases
                         else:
                             self.database["customers"][purchase_email] = [plugin_name]
-                except KeyError or IndexError:
+                except KeyError:
+                    pass
+                except IndexError:
                     pass
         except KeyError:
             pass
