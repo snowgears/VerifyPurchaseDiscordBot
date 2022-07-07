@@ -43,10 +43,10 @@ class VerifyBot:
         self.CHECK_PREVIOUSLY_VERIFIED = os.getenv("CHECK_PREVIOUSLY_VERIFIED").lower() == "true"
         self.paypal_api = paypal_api
         self.read_in_emails()
+        print("Loading purchases...")
         self.update_purchases_task()
 
     def update_purchases_task(self):
-        print("Loading purchases...")
         self.update_purchases()
         t = Timer(3600, self.update_purchases_task)
         t.daemon = True
@@ -172,6 +172,8 @@ class VerifyBot:
         if not isValid(email):
             await ctx.send(f"You must provide a valid email!", hidden=True)
             return
+
+        email = email.lower()
 
         logging.info(f"{ctx.author.name} ran command '/verify {email} {username}'")
         available_roles = []
