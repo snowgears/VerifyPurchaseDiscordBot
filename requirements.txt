@@ -4,3 +4,4 @@ discord.py
 python-dotenv
 discord-py-slash-command
 requests
+python-dateutil
