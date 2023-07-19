@@ -140,6 +140,10 @@ async def get_token():
             print(f'Invalid json in {LATEST_TOKEN_PATH}')
         else:
             if indata['expiration_time'] > time.time():
+                token_expire = int(indata['expiration_time']) - time.time() - 100
+                t = Timer(token_expire, get_token)
+                t.daemon = True
+                t.start()
                 return indata['access_token']
 
     url = PAYPAL_ENDPOINT + '/v1/oauth2/token'
