@@ -1,0 +1,4 @@
+.gitignore
+*.log
+.env
+latest-token.json
