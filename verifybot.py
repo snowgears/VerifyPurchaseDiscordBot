@@ -55,13 +55,13 @@ async def format_date(date):
     return d
 
 
-# this is for debugging / viewing reponses from paypal api
+# this is for debugging / viewing responses from PayPal api
 # def display_response(response):
 #     print('response:', response)
 #     print('url:', response.url)
-#     print('text:', response.text)    
+#     print('text:', response.text)
 
-# # this is for debugging / viewing data from paypal api
+# # this is for debugging / viewing data from PayPal api
 # def display_data(data):
 #     for key, value in data.items():
 #         if key == 'scope':
@@ -204,7 +204,7 @@ async def dm_admins(ctx, message):
 
 
 # this searches through all transactions to find matching emails
-# if an email is found, it returns the resourceid from the transaction
+# if an email is found, it returns the resource id from the transaction
 # if an email is not found, it returns an empty list
 async def find_resource_ids_from_email(email, transactions):
     matching_ids = []
@@ -219,9 +219,9 @@ async def find_resource_ids_from_email(email, transactions):
                 if purchase_email.lower() == email.lower():
                     s = purchase_custom_field.split('|')
                     s = s[len(s) - 1]
-                    # only add matching resource id to list if it hasnt been verified yet
+                    # only add matching resource id to list if it hasn't been verified yet
                     if not await has_previously_verified(email, s):
-                        matching_ids.append(s)  # add the matching spigot resource id)
+                        matching_ids.append(s)  # add the matching spigot resource id
             except KeyError:
                 pass
     except KeyError:
@@ -267,7 +267,7 @@ async def on_ready():
     required=True,
     opt_type=OptionType.STRING
 )
-async def _verifypurchase(ctx: SlashContext, email: str):  # Defines a new "context" (ctx) command called "verify"
+async def _verify_purchase(ctx: SlashContext, email: str):  # Defines a new "context" (ctx) command called "verify"
 
     logging.info(f"{ctx.author.global_name} ran command '/paypal {email}'")
 
