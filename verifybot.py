@@ -269,7 +269,7 @@ async def on_ready():
 )
 async def _verify_purchase(ctx: SlashContext, email: str):  # Defines a new "context" (ctx) command called "verify"
 
-    logging.info(f"{ctx.author.global_name} ran command '/paypal {email}'")
+    logging.info(f"{ctx.author.global_name} ran command '/verify {email}'")
 
     available_roles = RESOURCE_ROLE_LIST.copy()
 
