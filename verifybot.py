@@ -341,3 +341,9 @@ async def _verify_purchase(ctx: SlashContext, email: str):  # Defines a new "con
 
 # run the discord client with the discord token
 bot.start(DISCORD_TOKEN)
+
+def uncaught_exceptionhook(type, value, traceback):
+    # Log the exception or display a message to the user
+    print(f"An unhandled exception occurred: {value}")
+
+sys.excepthook = uncaught_exceptionhook
