@@ -1,4 +1,4 @@
-.env
-verified_emails
+.gitignore
 *.log
-.DS_Store
+.env
+latest-token.json
